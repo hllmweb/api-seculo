@@ -1,0 +1,62 @@
+<?php 
+header('Access-Control-Allow-Origin: *');
+header('Content-type: application/json');
+
+require_once('../../config/conection.php');
+
+$params = json_decode(file_get_contents('php://input'), TRUE);
+
+$iniciar = curl_init();
+curl_setopt($iniciar, CURLOPT_RETURNTRANSFER, true);
+$dados = array(
+    'cd_usuario' => $params['p_cd_usuario']
+);
+
+curl_setopt($iniciar, CURLOPT_POST, true);
+curl_setopt($iniciar, CURLOPT_POSTFIELDS, $dados);
+curl_exec($iniciar);
+
+$conn = oci_connect(user, pass, tns, encode);
+
+
+try{
+
+	$sql = "SELECT DISTINCT P.CODIGO, A.RA, P.NOME AS NOME_ALUNO, TO_CHAR(C.DT_ACOMPANHAMENTO,'DD/MM/YYYY') AS DT_ACOMPANHAMENTO, AM.CODTURMA,
+			C.COLACAO, C.ALMOCO, C.LANCHE, C.SONO, C.EVACUACAO, C.OBS_COLACAO, C.OBS_ALMOCO, C.OBS_LANCHE, C.OBS_SONO, C.OBS_EVACUACAO
+			FROM RM.PPESSOA P
+			LEFT JOIN RM.SALUNO A ON P.CODIGO = A.CODPESSOA
+			LEFT JOIN RM.SMATRICPL AM ON A.RA = AM.RA
+			LEFT JOIN RM.SHABILITACAOFILIAL H ON AM.IDHABILITACAOFILIAL = H.IDHABILITACAOFILIAL AND H.CODCURSO = '001'
+			INNER JOIN RM.SPLETIVO SP ON SP.IDPERLET = AM.IDPERLET AND AM.CODCOLIGADA = SP.CODCOLIGADA AND SP.CODPERLET = TO_CHAR(SYSDATE,'YYYY')
+			LEFT JOIN RM.STURMADISC STMD  ON H.IDHABILITACAOFILIAL = STMD.IDHABILITACAOFILIAL
+			LEFT JOIN RM.SPROFESSORTURMA SPT ON STMD.IDTURMADISC = SPT.IDTURMADISC
+			LEFT JOIN RM.ZMDACOMPAULA C ON C.RA = AM.RA AND  C.CODCOLIGADA = AM.CODCOLIGADA AND C.CODFILIAL = AM.CODFILIAL  
+			AND TRUNC(C.DT_ACOMPANHAMENTO) = TO_DATE(SYSDATE,'DD/MM/YYYY')
+			WHERE AM.CODSTATUS = 15 AND
+			(  
+				EXISTS(SELECT 1 FROM RM.VW_ALUNO_RESP_RM_PORTAL RESP
+				WHERE RESP.CPF_RESPONSAVEL = :CD_USUARIO AND RESP.RA = AM.RA AND AM.CODTURMA = STMD.CODTURMA)
+				OR
+				EXISTS(SELECT 1 FROM RM.SCOORDENADOR SC
+				JOIN RM.PPESSOA PP ON SC.CODPESSOA = PP.CODIGO WHERE PP.CODUSUARIO = :CD_USUARIO)
+				OR
+				EXISTS(SELECT 1 FROM RM.SPROFESSORTURMA PT
+				JOIN RM.STURMADISC TD ON TD.IDTURMADISC = PT.IDTURMADISC AND PT.CODPROF= :CD_USUARIO)
+			) ORDER BY P.NOME ASC";
+
+	$stid   = oci_parse($conn, $sql); 
+
+    oci_bind_by_name($stid, ':CD_USUARIO',  $dados['cd_usuario']);
+
+    oci_execute($stid);
+    oci_fetch_all($stid, $result, null, null, OCI_FETCHSTATEMENT_BY_ROW);
+    echo json_encode($result);
+
+
+}catch(Exception $e){
+    echo 'Erro: '.$e->getMessage();
+}
+
+
+
+?>
